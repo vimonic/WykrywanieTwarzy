@@ -9,9 +9,12 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout
 from tensorflow.keras.callbacks import ModelCheckpoint
 import tensorflow as tf
+import pickle
+
+from tensorflow.keras.models import load_model
+
 
 def load_data(data_dir, img_size=(100, 100)):
-
     # Inicjalizacja detektora twarzy
     cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
     face_cascade = cv2.CascadeClassifier(cascade_path)
@@ -29,7 +32,7 @@ def load_data(data_dir, img_size=(100, 100)):
             img = cv2.imread(file_path)
             if img is None:
                 continue
-            # Konwersja na skalę szarości (możesz też pozostawić kolor, wtedy zmień input_shape w modelu)
+            # Konwersja na skalę szarości (można pozostawić kolor, ale wtedy zmień input_shape w modelu)
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
             # Wykrywanie twarzy
             faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5)
@@ -42,7 +45,7 @@ def load_data(data_dir, img_size=(100, 100)):
             face_resized = cv2.resize(face, img_size)
             # Normalizacja pikseli do zakresu [0,1]
             face_normalized = face_resized.astype('float32') / 255.0
-            # Dodanie wymiaru kanału (jako że obraz jest szary)
+            # Dodanie wymiaru kanału (bo obraz jest szary)
             face_normalized = np.expand_dims(face_normalized, axis=-1)
             images.append(face_normalized)
             labels.append(label)
@@ -92,10 +95,19 @@ if __name__ == '__main__':
     X, y = load_data(data_dir)
     print(f"Loaded {len(X)} images.")
 
+    if len(X) == 0:
+        print("Brak danych! Sprawdź strukturę folderu 'data'.")
+        exit()
+
     # Kodowanie etykiet
     le = LabelEncoder()
     y_encoded = le.fit_transform(y)
     y_categorical = to_categorical(y_encoded)
+
+    # Zapisanie obiektu LabelEncoder do pliku
+    with open('label_encoder.pkl', 'wb') as f:
+        pickle.dump(le, f)
+    print("Label encoder saved as 'label_encoder.pkl'.")
 
     # Podział danych na zbiór treningowy i walidacyjny
     X_train, X_val, y_train, y_val = train_test_split(X, y_categorical, test_size=0.2, random_state=42)
@@ -118,6 +130,5 @@ if __name__ == '__main__':
                         validation_data=(X_val, y_val), callbacks=callbacks_list)
 
     # Zapisanie finalnego modelu
-    model.save("final_model.h5")
+    model.save("final_model_v1.h5")
     print("Training complete. Model saved as final_model.h5.")
-

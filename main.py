@@ -1,33 +1,3 @@
-# import tensorflow as tf
-# import sklearn
-# import cv2
-# import pip
-#
-# def print_hi(name):
-#     # Use a breakpoint in the code line below to debug your script.
-#     print(f'Hi, {name}')  # Press Ctrl+F8 to toggle the breakpoint.
-#
-#     # Print versions of installed packages
-#     print(f'TensorFlow version: {tf.__version__}')
-#     print(f'scikit-learn version: {sklearn.__version__}')
-#     print(f'OpenCV version: {cv2.__version__}')
-#
-#     # Check for GPU availability
-#     gpus = tf.config.list_physical_devices('GPU')
-#     if gpus:
-#         print(f'GPU is available: {gpus}')
-#     else:
-#         print('No GPU available.')
-#
-#     # Alternatively, you can use pip to get all installed packages' versions
-#     print("\nInstalled packages:")
-#     installed_packages = pip.get_installed_distributions()
-#     for package in installed_packages:
-#         print(f'{package.project_name}=={package.version}')
-#
-# # Press the green button in the gutter to run the script.
-# if __name__ == '__main__':
-#     print_hi('PyCharm')
 import os
 import cv2
 import numpy as np
@@ -41,12 +11,6 @@ from tensorflow.keras.callbacks import ModelCheckpoint
 import tensorflow as tf
 
 def load_data(data_dir, img_size=(100, 100)):
-    # Check for GPU availability
-    gpus = tf.config.list_physical_devices('GPU')
-    if gpus:
-        print(f'GPU is available: {gpus}')
-    else:
-        print('No GPU available.')
 
     # Inicjalizacja detektora twarzy
     cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'

@@ -1,2 +1,4 @@
 ./data/*/*
-# zdjęcia z twarzami
+./models/*/*
+./old_models/*/*
+# zdjęcia z twarzami i modele

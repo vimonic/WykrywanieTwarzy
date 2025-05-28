@@ -2,7 +2,7 @@ import numpy as np
 from numpy.linalg import norm
 
 class FaceMatcher:
-    def __init__(self, threshold=0.80):
+    def __init__(self, threshold=0.60):
         self.threshold = threshold
 
     def cosine_similarity(self, emb1, emb2):

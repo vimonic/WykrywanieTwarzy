@@ -87,13 +87,45 @@ class UserModel:
         result = cursor.fetchone()
         return result
 
-    def log_event(self, user_id, status):
+    def log_event(self, user_id, status, image=None, confidence=None):
+        """
+        Zapisuje zdarzenie logowania z opcjonalnym zdjęciem i poziomem pewności.
+        """
         from datetime import datetime
         conn = self.db.get_conn()
         cursor = conn.cursor()
-        cursor.execute('INSERT INTO Logs(timestamp, user_id, status) VALUES(?,?,?)',
-                       (datetime.now().isoformat(), user_id, status))
-        conn.commit()
+        
+        try:
+            if confidence is not None:
+                confidence = float(confidence)
+                
+            cursor.execute(
+                'INSERT INTO Logs(timestamp, user_id, status, image, confidence) VALUES(?,?,?,?,?)',
+                (datetime.now().isoformat(), user_id, status, image, confidence)
+            )
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"Error logging event: {e}")
+            conn.rollback()
+            return False
+
+    def get_access_logs(self, limit=100):
+        """
+        Pobiera historię logowań z bazy danych.
+        Zwraca listę krotek (id, timestamp, user_id, status, image, confidence)
+        """
+        conn = self.db.get_conn()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT l.id, l.timestamp, l.user_id, u.name, l.status, l.image, l.confidence
+            FROM Logs l
+            JOIN Users u ON l.user_id = u.id
+            WHERE l.status = 'success'
+            ORDER BY l.timestamp DESC
+            LIMIT ?
+        ''', (limit,))
+        return cursor.fetchall()
 
     def admin_exists(self):
         conn = self.db.get_conn()
@@ -143,5 +175,69 @@ class UserModel:
             return cursor.rowcount > 0
         except Exception as e:
             print(f"Error updating user: {e}")
+            conn.rollback()
+            return False
+
+    def log_unauthorized_access(self, image_bytes, confidence):
+        """
+        Zapisuje nieudaną próbę dostępu wraz ze zdjęciem.
+        """
+        from datetime import datetime
+        conn = self.db.get_conn()
+        cursor = conn.cursor()
+        try:
+            # Ensure confidence is a float
+            confidence = float(confidence)
+            cursor.execute(
+                'INSERT INTO UnauthorizedAccess(timestamp, image, confidence) VALUES(?, ?, ?)',
+                (datetime.now().isoformat(), image_bytes, confidence)
+            )
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"Error logging unauthorized access: {e}")
+            conn.rollback()
+            return False
+
+    def get_unauthorized_attempts(self, limit=100):
+        """
+        Pobiera listę nieuprawnionych prób dostępu.
+        Zwraca listę krotek (id, timestamp, image_bytes, confidence)
+        """
+        conn = self.db.get_conn()
+        cursor = conn.cursor()
+        cursor.execute(
+            'SELECT id, timestamp, image, confidence FROM UnauthorizedAccess ORDER BY timestamp DESC LIMIT ?',
+            (limit,)
+        )
+        return cursor.fetchall()
+
+    def delete_unauthorized_attempt(self, attempt_id):
+        """
+        Usuwa nieautoryzowaną próbę dostępu o podanym ID.
+        """
+        conn = self.db.get_conn()
+        cursor = conn.cursor()
+        try:
+            cursor.execute('DELETE FROM UnauthorizedAccess WHERE id = ?', (attempt_id,))
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"Error deleting unauthorized attempt: {e}")
+            conn.rollback()
+            return False
+
+    def clear_logs(self):
+        """
+        Tymczasowa metoda do wyczyszczenia tabeli logów.
+        """
+        conn = self.db.get_conn()
+        cursor = conn.cursor()
+        try:
+            cursor.execute('DELETE FROM Logs')
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"Error clearing logs: {e}")
             conn.rollback()
             return False

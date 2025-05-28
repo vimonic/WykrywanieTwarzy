@@ -3,7 +3,7 @@ import numpy as np
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QStackedWidget, QFrame, QInputDialog, QMessageBox, QDialog, QComboBox, QLineEdit, QDialogButtonBox,
-    QTableWidget, QHeaderView, QTableWidgetItem, QFormLayout
+    QTableWidget, QHeaderView, QTableWidgetItem, QFormLayout, QTabWidget, QMainWindow
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 from PyQt5.QtGui import QFont, QImage, QPixmap, QPainter, QPen
@@ -13,6 +13,11 @@ from face_recognition.embedder import FaceEmbedder
 from database.models import UserModel
 from utils.image_utils import preprocess_face
 from ui.metrics_window import MetricsWindow
+from ui.user_list import UserList
+from ui.metrics_panel import MetricsPanel
+from ui.settings_panel import SettingsPanel
+from ui.unauthorized_access_panel import UnauthorizedAccessPanel
+from ui.access_logs_panel import AccessLogsPanel
 
 class UserEditDialog(QDialog):
     """Dialog for editing user information"""
@@ -86,7 +91,7 @@ class UserEditDialog(QDialog):
             'role': self.role_combo.currentText()
         }
 
-class AdminPanel(QWidget):
+class AdminPanel(QMainWindow):
     """Panel shown to administrators after successful authentication"""
 
     logout_requested = pyqtSignal()  # Signal to notify logout request
@@ -111,81 +116,89 @@ class AdminPanel(QWidget):
         self.reg_count = 0
         self.new_user_name = None
 
-        self.init_ui()
+        self.setWindowTitle('Panel Administratora')
+        self.setGeometry(100, 100, 1200, 800)
 
-    def init_ui(self):
-        """Initialize the admin panel UI"""
-        # Main layout
-        main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(20, 20, 20, 20)
-        main_layout.setSpacing(15)
+        # Główny widget i layout
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        main_layout = QVBoxLayout(central_widget)
 
-        # Welcome header
-        welcome_label = QLabel(f"Witaj, {self.username}")
-        welcome_label.setFont(QFont('Segoe UI', 24, QFont.Bold))
-        welcome_label.setStyleSheet('color: #333;')
-        welcome_label.setAlignment(Qt.AlignCenter)
+        # Nagłówek z powitaniem i przyciskiem wylogowania
+        header_layout = QHBoxLayout()
+        welcome_label = QLabel(f"Witaj, {self.username}!")
+        welcome_label.setStyleSheet("""
+            QLabel {
+                font-size: 24px;
+                color: #333;
+                font-weight: bold;
+                margin: 10px;
+            }
+        """)
+        header_layout.addWidget(welcome_label)
+        header_layout.addStretch()
 
-        # Admin info label
-        info_label = QLabel("Panel administratora")
-        info_label.setFont(QFont('Segoe UI', 12))
-        info_label.setStyleSheet('color: #666;')
-        info_label.setAlignment(Qt.AlignCenter)
-
-        # Create menu buttons
-        add_user_btn = self.create_menu_button('Dodaj użytkownika')
-        add_user_btn.clicked.connect(lambda: self.stack.setCurrentIndex(0))
-
-        user_list_btn = self.create_menu_button('Lista użytkowników')
-        user_list_btn.clicked.connect(lambda: self.show_user_list())
-
-        # metrics_btn  = self.create_menu_button('Metryki systemu')
-        # self.metrics_btn.clicked.connect(self.show_metrics_window)
-        metrics_btn = self.create_menu_button('Metryki systemu')
-        metrics_btn.clicked.connect(self.show_metrics_window)
-
-        settings_btn = self.create_menu_button('Ustawienia aplikacji')
-        settings_btn.clicked.connect(lambda: self.stack.setCurrentIndex(1))
-
-        logout_btn = self.create_menu_button('Wyloguj się')
-        logout_btn.setStyleSheet(
-            'QPushButton { background-color: #73198a; color: white; '
-            'border: none; border-radius: 5px; }'
-            'QPushButton:hover { background-color: #451552; }'
-            'QPushButton:pressed { background-color: #662378; }'
-        )
-        logout_btn.clicked.connect(self.on_logout)
-
-        # Menu layout
-        menu_layout = QHBoxLayout()
-        menu_layout.addWidget(add_user_btn)
-        menu_layout.addWidget(user_list_btn)
-        menu_layout.addWidget(metrics_btn)
-        menu_layout.addWidget(settings_btn)
-        menu_layout.addWidget(logout_btn)
-
-        # Create content area
-        self.stack = QStackedWidget()
-        self.stack.addWidget(self.create_user_registration_panel())
-        self.stack.addWidget(self.create_user_list_panel())
-        self.stack.addWidget(self.create_placeholder_panel("Ustawienia aplikacji",
-                                                           "Ta funkcjonalność zostanie zaimplementowana wkrótce."))
-
-        # Content frame with styling
-        content_frame = QFrame()
-        content_frame.setStyleSheet('background-color: #f8f8f8; border-radius: 8px; border: 1px solid #ddd;')
-        content_layout = QVBoxLayout(content_frame)
-        content_layout.addWidget(self.stack)
-
-        # Add all elements to main layout
-        main_layout.addWidget(welcome_label)
-        main_layout.addWidget(info_label)
-        main_layout.addSpacing(15)
-        main_layout.addLayout(menu_layout)
-        main_layout.addSpacing(10)
-        main_layout.addWidget(content_frame)
-
-        self.setLayout(main_layout)
+        logout_btn = QPushButton("Wyloguj")
+        logout_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #dc3545;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #c82333;
+            }
+        """)
+        logout_btn.clicked.connect(self.logout_requested.emit)
+        header_layout.addWidget(logout_btn)
+        main_layout.addLayout(header_layout)
+        
+        # Tworzenie zakładek
+        self.tabs = QTabWidget()
+        self.tabs.setStyleSheet("""
+            QTabWidget::pane {
+                border: 1px solid #ddd;
+                background: white;
+                border-radius: 4px;
+            }
+            QTabBar::tab {
+                background: #f8f9fa;
+                border: 1px solid #ddd;
+                padding: 8px 16px;
+                margin-right: 2px;
+            }
+            QTabBar::tab:selected {
+                background: white;
+                border-bottom-color: white;
+            }
+            QTabBar::tab:hover {
+                background: #e9ecef;
+            }
+        """)
+        
+        # Dodawanie paneli
+        self.metrics_panel = MetricsPanel()
+        self.user_list = UserList()
+        self.settings_panel = SettingsPanel()
+        self.unauthorized_panel = UnauthorizedAccessPanel()
+        self.access_logs_panel = AccessLogsPanel()
+        
+        # Tworzenie panelu rejestracji użytkownika
+        self.registration_panel = self.create_user_registration_panel()
+        
+        # Dodawanie wszystkich zakładek
+        self.tabs.addTab(self.metrics_panel, "Metryki")
+        self.tabs.addTab(self.registration_panel, "Dodaj użytkownika")
+        self.tabs.addTab(self.user_list, "Lista użytkowników")
+        self.tabs.addTab(self.unauthorized_panel, "Nieuprawnione próby")
+        self.tabs.addTab(self.access_logs_panel, "Historia logowań")
+        self.tabs.addTab(self.settings_panel, "Ustawienia")
+        
+        main_layout.addWidget(self.tabs)
+        
+        self.show()
 
     def create_menu_button(self, text):
         """Create a menu button with consistent styling"""
@@ -204,10 +217,10 @@ class AdminPanel(QWidget):
         """Create a placeholder panel for features to be implemented later"""
         panel = QWidget()
         layout = QVBoxLayout()
-        layout.setAlignment(Qt.AlignCenter)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         title_label = QLabel(title)
-        title_label.setFont(QFont('Segoe UI', 18, QFont.Bold))
+        title_label.setFont(QFont('Segoe UI', 18, QFont.Weight.Bold))
         title_label.setStyleSheet('color: #333;')
         title_label.setAlignment(Qt.AlignCenter)
 
@@ -228,7 +241,7 @@ class AdminPanel(QWidget):
 
         # Title
         title_label = QLabel("Lista użytkowników")
-        title_label.setFont(QFont('Segoe UI', 18, QFont.Bold))
+        title_label.setFont(QFont('Segoe UI', 18, QFont.Weight.Bold))
         title_label.setStyleSheet('color: #333;')
         title_label.setAlignment(Qt.AlignCenter)
 
@@ -437,7 +450,7 @@ class AdminPanel(QWidget):
 
         # Title
         title_label = QLabel("Dodawanie użytkownika")
-        title_label.setFont(QFont('Segoe UI', 18, QFont.Bold))
+        title_label.setFont(QFont('Segoe UI', 18, QFont.Weight.Bold))
         title_label.setStyleSheet('color: #333;')
         title_label.setAlignment(Qt.AlignCenter)
 

@@ -3,6 +3,7 @@ import cv2
 import numpy as np
 import time
 from datetime import datetime, timedelta
+from pathlib import Path
 from PyQt5.QtWidgets import (
     QMainWindow, QApplication, QPushButton, QLabel,
     QVBoxLayout, QWidget, QHBoxLayout, QMessageBox,
@@ -17,13 +18,15 @@ from face_recognition.matcher import FaceMatcher
 from database.models import UserModel
 from utils.image_utils import preprocess_face
 from ui.admin_registration import AdminRegistration
-from ui.admin_panel import AdminPanel  # Import admin panel
+from ui.admin_panel import AdminPanel
 from ui.user_panel import UserPanel
 from metrics.collector import metrics_collector
+from notifications.notification_manager import notification_manager
 
 # Constants for application
 AUTH_REQUIRED_TIME = 3.0  # seconds
 LOG_THROTTLE_TIME = 60  # seconds
+UNAUTHORIZED_DETECTION_TIME = 10.0  # seconds
 
 class FaceMetricsPanel(QFrame):
     """Panel displaying real-time face detection metrics"""
@@ -121,6 +124,15 @@ class FaceAuthManager:
         # Logging throttling
         self.last_log_time = {}  # user_id -> timestamp
 
+        # Unauthorized access tracking
+        self.unauthorized_detection_start = 0
+        self.unauthorized_frame = None
+        self.unauthorized_score = 0.0
+        
+        # Ścieżka do zapisu zdjęć nieautoryzowanych prób
+        self.unauthorized_dir = Path("unauthorized_attempts")
+        self.unauthorized_dir.mkdir(exist_ok=True)
+
     def reset_auth_state(self):
         """Reset the authentication state"""
         self.auth_state = "waiting"
@@ -129,6 +141,9 @@ class FaceAuthManager:
         self.current_user_id = None
         self.current_score = 0.0
         self.face_dims = (0, 0)
+        self.unauthorized_detection_start = 0
+        self.unauthorized_frame = None
+        self.unauthorized_score = 0.0
 
     def process_frame(self, frame):
         """Process a video frame for face authentication"""
@@ -152,12 +167,11 @@ class FaceAuthManager:
         # Detect faces
         faces = self.detector.detect_faces(frame)
 
-        # ── INSERT #3: FACE QUALITY LOGGING HERE ──
-        if len(faces) > 0:
-            # Convert image quality string to numeric score
-            quality_str = self.estimate_image_quality(frame)
-            quality_score = self.quality_to_score(quality_str)
-            metrics_collector.log_face_quality(quality_score)
+        # Reset unauthorized tracking if no face detected
+        if len(faces) == 0:
+            self.unauthorized_detection_start = 0
+            self.unauthorized_frame = None
+            self.unauthorized_score = 0.0
 
         # If no face is detected, reset the authentication state
         if len(faces) == 0:
@@ -195,6 +209,11 @@ class FaceAuthManager:
 
             # Update authentication state based on score and timing
             if score >= self.matcher.threshold:  # Above threshold
+                # Reset unauthorized tracking
+                self.unauthorized_detection_start = 0
+                self.unauthorized_frame = None
+                self.unauthorized_score = 0.0
+
                 if self.auth_state == "waiting":
                     # First detection above threshold
                     self.auth_state = "detecting"
@@ -232,6 +251,32 @@ class FaceAuthManager:
                     self.auth_state = "waiting"
                     self.continuous_detection_time = 0
 
+                # Track unauthorized access attempt
+                if self.unauthorized_detection_start == 0:
+                    self.unauthorized_detection_start = current_time
+                    self.unauthorized_frame = frame.copy()
+                    self.unauthorized_score = score
+                elif current_time - self.unauthorized_detection_start >= UNAUTHORIZED_DETECTION_TIME:
+                    # Zapisz zdjęcie nieautoryzowanej próby
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    image_path = self.unauthorized_dir / f"unauthorized_{timestamp}.jpg"
+                    cv2.imwrite(str(image_path), self.unauthorized_frame)
+                    
+                    # Zapisz do bazy danych
+                    _, img_encoded = cv2.imencode('.jpg', self.unauthorized_frame)
+                    self.user_model.log_unauthorized_access(img_encoded.tobytes(), self.unauthorized_score)
+                    
+                    # Wyślij powiadomienie email
+                    notification_manager.send_unauthorized_access_notification(
+                        str(image_path),
+                        self.unauthorized_score
+                    )
+                    
+                    # Reset tracking
+                    self.unauthorized_detection_start = 0
+                    self.unauthorized_frame = None
+                    self.unauthorized_score = 0.0
+
                 # Log failed authentication attempt (rate-limited)
                 now = time.time()
                 if not hasattr(self, 'last_failed_log') or (now - self.last_failed_log) > 2.0:
@@ -240,7 +285,6 @@ class FaceAuthManager:
                         confidence=score
                     )
                     self.last_failed_log = now
-
 
             # Draw rectangle around face with color based on state
             if self.auth_state == "waiting":
@@ -336,7 +380,18 @@ class FaceAuthManager:
         # Check if we should log this event (throttle by user_id)
         last_log = self.last_log_time.get(user_id)
         if last_log is None or (current_time - last_log) > timedelta(seconds=LOG_THROTTLE_TIME):
-            self.user_model.log_event(user_id, 'success')
+            # Get current frame and encode it
+            ret, frame = self.detector.get_current_frame()
+            if ret:
+                _, img_encoded = cv2.imencode('.jpg', frame)
+                self.user_model.log_event(
+                    user_id,
+                    'success',
+                    img_encoded.tobytes(),
+                    self.current_score
+                )
+            else:
+                self.user_model.log_event(user_id, 'success')
             self.last_log_time[user_id] = current_time
 
     def estimate_image_quality(self, image):
@@ -417,7 +472,7 @@ class LoginScreen(QMainWindow):
         """Initialize all UI elements for the login screen"""
         # Title and buttons
         title = QLabel('Face Access System')
-        title.setFont(QFont('Segoe UI', 20, QFont.Bold))
+        title.setFont(QFont('Segoe UI', 20, QFont.Weight.Bold))
         title.setStyleSheet('color: #333; padding: 15px;')
 
         back_btn = QPushButton('Wróć')
@@ -482,9 +537,9 @@ class LoginScreen(QMainWindow):
         # Admin registration related elements
         self.admin_exists = self.user_model.admin_exists()
         self.admin_label = QLabel('Brak zarejestrowanego Admina. Czy chcesz go zarejestrować?')
-        self.admin_label.setFont(QFont('Segoe UI', 14, QFont.Bold))
+        self.admin_label.setFont(QFont('Segoe UI', 14, QFont.Weight.Bold))
         self.admin_label.setStyleSheet('color: red;')
-        self.admin_label.setAlignment(Qt.AlignCenter)
+        self.admin_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.reg_btn = QPushButton('Zarejestruj Admina')
         self.reg_btn.setFont(QFont('Segoe UI', 14))
@@ -604,9 +659,6 @@ class LoginScreen(QMainWindow):
             self.auth_progress.setValue(progress)
         elif self.auth_manager.auth_state == "verified":
             self.auth_progress.setValue(100)
-            # When verification is complete, start a timer to transition to user panel
-            if not self.auth_timer.isActive():
-                self.auth_timer.start(1000)  # Wait 1 second before transitioning for better UX
         elif self.auth_manager.auth_state == "failed":
             # Use red progress bar for failed
             self.auth_progress.setStyleSheet("""
@@ -649,9 +701,15 @@ class LoginScreen(QMainWindow):
         display_frame, metrics = self.auth_manager.process_frame(frame)
 
         # Zapisz ID użytkownika, gdy weryfikacja jest zakończona
-        if self.auth_manager.auth_state == "verified" and self.auth_manager.current_user_id is not None:
+        if (self.auth_manager.auth_state == "verified" and 
+            self.auth_manager.current_user_id is not None and 
+            not self.auth_timer.isActive()):  # Dodany warunek sprawdzający czy timer nie jest aktywny
+            
             self.verified_user_id = self.auth_manager.current_user_id
             print(f"✅ Zapisano verified_user_id: {self.verified_user_id}")
+            
+            # Start timer for panel transition
+            self.auth_timer.start(1000)  # Wait 1 second before transitioning for better UX
 
         # Add loading dots to status if detecting
         if self.auth_manager.auth_state == "detecting" and "status" in metrics:

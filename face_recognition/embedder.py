@@ -6,7 +6,6 @@ class FaceEmbedder:
         self.embedder = FaceNet()
 
     def get_embedding(self, preprocessed_face):
-        # preprocessed_face: uint8 RGB, shape (1,160,160,3)
         face = preprocessed_face[0]  # (160,160,3)
         emb = self.embedder.embeddings([face])[0]
         # L2‑normalizacja

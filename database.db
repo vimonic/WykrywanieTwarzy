@@ -1,0 +1,19 @@
+import sqlite3
+
+# Połączenie z bazą danych
+conn = sqlite3.connect('database.db')
+cursor = conn.cursor()
+
+# Tworzenie tabeli pracowników
+cursor.execute('''CREATE TABLE IF NOT EXISTS employees
+                  (id INTEGER PRIMARY KEY, name TEXT, image_path TEXT)''')
+
+# Dodanie nowego pracownika
+def add_employee(name, image_path):
+    cursor.execute('''INSERT INTO employees (name, image_path) VALUES (?, ?)''', (name, image_path))
+    conn.commit()
+
+# Pobranie wszystkich pracowników
+def get_all_employees():
+    cursor.execute('''SELECT * FROM employees''')
+    return cursor.fetchall()

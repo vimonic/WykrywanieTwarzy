@@ -7,10 +7,6 @@ class UserModel:
         self.db = Database()
 
     def add_user(self, name, embedding, role='USER'):
-        """
-        Dodaje nowego użytkownika z nazwą, embeddingiem i rolą.
-        role: 'USER' lub 'ADMIN'
-        """
         conn = self.db.get_conn()
         cursor = conn.cursor()
         cursor.execute('INSERT INTO Users(name, role) VALUES(?,?)', (name, role))
@@ -21,9 +17,6 @@ class UserModel:
         return user_id
 
     def add_embedding(self, user_id, embedding):
-        """
-        Dodaje kolejny embedding do istniejącego user_id.
-        """
         conn = self.db.get_conn()
         cursor = conn.cursor()
         emb_bytes = embedding.tobytes()
@@ -56,29 +49,19 @@ class UserModel:
             results.append((user_id, emb))
         return results
 
-    # def get_user(self, user_id):
-    #     conn = self.db.get_conn()
-    #     cursor = conn.cursor()
-    #     cursor.execute('SELECT id, name, role FROM Users WHERE id=?', (user_id,))
-    #     return cursor.fetchone()
     def get_user(self, user_id):
-        """Get user by ID with extra validation"""
         if user_id is None:
             print("Warning: user_id is None!")
             return None
 
-        # Upewnij się, że user_id jest liczbą całkowitą
         try:
             user_id = int(user_id)
         except (ValueError, TypeError):
             print(f"Warning: user_id '{user_id}' is not a valid integer!")
-            # Możesz spróbować szukać po stringu jeśli chcesz
-            # ale najprawdopodobniej problem jest gdzie indziej
 
         conn = self.db.get_conn()
         cursor = conn.cursor()
 
-        # Najpierw sprawdź czy użytkownik istnieje
         cursor.execute('SELECT COUNT(*) FROM Users WHERE id=?', (user_id,))
         count = cursor.fetchone()[0]
         print(f"Found {count} users with id={user_id}")
@@ -88,9 +71,6 @@ class UserModel:
         return result
 
     def log_event(self, user_id, status, image=None, confidence=None):
-        """
-        Zapisuje zdarzenie logowania z opcjonalnym zdjęciem i poziomem pewności.
-        """
         from datetime import datetime
         conn = self.db.get_conn()
         cursor = conn.cursor()
@@ -111,10 +91,6 @@ class UserModel:
             return False
 
     def get_access_logs(self, limit=100):
-        """
-        Pobiera historię logowań z bazy danych.
-        Zwraca listę krotek (id, timestamp, user_id, status, image, confidence)
-        """
         conn = self.db.get_conn()
         cursor = conn.cursor()
         cursor.execute('''
@@ -135,10 +111,6 @@ class UserModel:
         return count > 0
 
     def get_all_users(self):
-        """
-        Pobiera wszystkich użytkowników z bazy danych.
-        Zwraca listę tupli (id, name, role, embedding_count)
-        """
         conn = self.db.get_conn()
         cursor = conn.cursor()
 
@@ -154,9 +126,6 @@ class UserModel:
         return cursor.fetchall()
 
     def update_user(self, user_id, name=None, role=None):
-        """
-        Aktualizuje dane użytkownika.
-        """
         if not name and not role:
             return False
 

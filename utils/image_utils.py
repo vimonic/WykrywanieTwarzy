@@ -1,15 +1,3 @@
-# import cv2
-# import numpy as np
-#
-# def preprocess_face(face_img, size=(160, 160)):
-#     # Resize
-#     face = cv2.resize(face_img, size)
-#     # Normalizacja do [-1, 1]
-#     face = face.astype('float32')
-#     mean, std = face.mean(), face.std()
-#     face = (face - mean) / std
-#     # Dodaj batch dimension
-#     return np.expand_dims(face, axis=0)
 import cv2
 import numpy as np
 
